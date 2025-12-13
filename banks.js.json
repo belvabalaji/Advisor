@@ -1,6 +1,0 @@
-[
-  { "bank_name": "SBI", "annual_rate_percent": 9.5, "processing_fee_percent": 0.5, "supported_tenures": [36,48,60,72] },
-  { "bank_name": "HDFC", "annual_rate_percent": 10.2, "processing_fee_percent": 0.75, "supported_tenures": [36,48,60] },
-  { "bank_name": "ICICI", "annual_rate_percent": 10.8, "processing_fee_percent": 0.65, "supported_tenures": [36,48,60,72] },
-  { "bank_name": "Axis", "annual_rate_percent": 11.0, "processing_fee_percent": 0.6, "supported_tenures": [48,60,72] }
-]
