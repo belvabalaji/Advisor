@@ -1,0 +1,6 @@
+[
+  { "city": "Bangalore", "pin_prefixes": ["560"], "rto_percent": 8.0, "insurance_zone": "A" },
+  { "city": "Mumbai", "pin_prefixes": ["400"], "rto_percent": 12.5, "insurance_zone": "A" },
+  { "city": "Delhi", "pin_prefixes": ["110"], "rto_percent": 10.0, "insurance_zone": "A" },
+  { "city": "Chennai", "pin_prefixes": ["600"], "rto_percent": 9.0, "insurance_zone": "B" }
+]
