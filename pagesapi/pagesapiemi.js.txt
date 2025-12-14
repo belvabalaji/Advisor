@@ -1,0 +1,86 @@
+// pages/api/emi.js
+import fs from 'fs';
+import path from 'path';
+
+function readData(filename) {
+  const p = path.join(process.cwd(), 'public', 'data', filename);
+  const raw = fs.readFileSync(p, 'utf8');
+  return JSON.parse(raw);
+}
+
+// EMI formula: EMI = P * r * (1+r)^n / ((1+r)^n -1), where r = monthly rate (decimal), n = months
+function calcEMI(loanAmount, annualRatePercent, tenureMonths) {
+  const r = (annualRatePercent / 100) / 12;
+  const n = tenureMonths;
+  if (r === 0) return loanAmount / n;
+  const emi = loanAmount * r * Math.pow(1+r, n) / (Math.pow(1+r, n) - 1);
+  const totalPayment = emi * n;
+  const totalInterest = totalPayment - loanAmount;
+  return { emi: Math.round(emi), totalInterest: Math.round(totalInterest) };
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST' });
+  try {
+    const body = req.body || {};
+    const { price_onroad, down_payment_percent = 20, monthly_income, monthly_liabilities } = body;
+    if (!price_onroad) return res.status(400).json({ error: 'price_onroad required' });
+
+    const banks = readData('banks.json');
+
+    const downPayment = Math.round((down_payment_percent/100) * price_onroad);
+    const loan = Math.round(price_onroad - downPayment);
+
+    // affordability cap
+    let afford_cap;
+    if (monthly_income && monthly_liabilities !== undefined && monthly_income !== null) {
+      const ndi = Number(monthly_income) - Number(monthly_liabilities || 0);
+      afford_cap = Math.round(0.4 * ndi);
+    } else {
+      afford_cap = Math.round(price_onroad * 0.015); // heuristic
+    }
+
+    const emi_table = [];
+    for (const bank of banks) {
+      for (const tenure of bank.supported_tenures) {
+        const em = calcEMI(loan, bank.annual_rate_percent, tenure);
+        emi_table.push({
+          bank: bank.bank_name,
+          tenure,
+          emi: em.emi,
+          total_interest: em.totalInterest,
+          affordable: em.emi <= afford_cap
+        });
+      }
+    }
+    // sort by tenure then EMI
+    emi_table.sort((a,b) => a.emi - b.emi);
+
+    // Recommended: choose the option with affordable=true and lowest total_interest
+    const affordableOptions = emi_table.filter(e => e.affordable);
+    let recommended = null;
+    if (affordableOptions.length > 0) {
+      affordableOptions.sort((a,b) => a.total_interest - b.total_interest);
+      const best = affordableOptions[0];
+      recommended = { bank: best.bank, tenure_months: best.tenure, emi: best.emi, reason: 'Affordable and lowest total interest among affordable options' };
+    } else {
+      // if none affordable, pick lowest EMI and warn
+      const lowestEmi = emi_table.reduce((p,c) => c.emi < p.emi ? c : p, emi_table[0]);
+      recommended = { bank: lowestEmi.bank, tenure_months: lowestEmi.tenure, emi: lowestEmi.emi, reason: 'No option within safe EMI limit; selected lowest EMI but consider increasing down payment or choosing cheaper variant.' };
+    }
+
+    res.status(200).json({
+      price_onroad,
+      down_payment_percent,
+      downPayment,
+      loan,
+      safe_emi_limit: afford_cap,
+      emi_table,
+      recommended
+    });
+
+  } catch (err) {
+    console.error('emi error', err);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+}

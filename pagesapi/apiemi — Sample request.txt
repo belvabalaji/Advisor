@@ -1,0 +1,6 @@
+{
+  "price_onroad": 1830000,
+  "down_payment_percent": 20,
+  "monthly_income": 150000,
+  "monthly_liabilities": 50000
+}

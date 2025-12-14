@@ -1,0 +1,38 @@
+[
+  {
+    "dealer_id": "trident_hyundai_bannerghatta",
+    "brand": "Hyundai",
+    "name": "Trident Hyundai - Bannerghatta Road",
+    "city": "Bangalore",
+    "pin_codes": ["560062","560076","560076"],
+    "address": "Bannerghatta Road, Bangalore",
+    "phone": "+9180XXXXXXX",
+    "coords": {"lat": 12.9121, "lon": 77.5730},
+    "variants_stock": ["car_hyundai_creta_15_sx","car_kia_seltos_15_htx"],
+    "test_ride_available": true
+  },
+  {
+    "dealer_id": "advaith_kia_hsr",
+    "brand": "Kia",
+    "name": "Advaith Kia - HSR Layout",
+    "city": "Bangalore",
+    "pin_codes": ["560062","560102"],
+    "address": "HSR Layout, Bangalore",
+    "phone": "+9180YYYYYYY",
+    "coords": {"lat": 12.9141, "lon": 77.6400},
+    "variants_stock": ["car_kia_seltos_15_htx"],
+    "test_ride_available": true
+  },
+  {
+    "dealer_id": "honda_showroom_koramangala",
+    "brand": "Honda",
+    "name": "Honda Showroom - Koramangala",
+    "city": "Bangalore",
+    "pin_codes": ["560095","560062"],
+    "address": "Koramangala, Bangalore",
+    "phone": "+9180ZZZZZZZ",
+    "coords": {"lat": 12.9379, "lon": 77.6245},
+    "variants_stock": ["bike_honda_sp125_disc"],
+    "test_ride_available": true
+  }
+]

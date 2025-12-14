@@ -1,0 +1,282 @@
+// pages/api/match.js
+import fs from 'fs';
+import path from 'path';
+
+// Helper: read JSON from /public/data
+function readData(filename) {
+  const p = path.join(process.cwd(), 'public', 'data', filename);
+  const raw = fs.readFileSync(p, 'utf8');
+  return JSON.parse(raw);
+}
+
+// Utility: safe number conversion
+const toNum = v => (v === undefined || v === null || v === '' ? null : Number(v));
+
+// Map textual answers to numeric bands used for scoring
+function powerBand(label) {
+  // label expected: Basic, Balanced, Strong, Sporty
+  const map = { Basic: 1, Balanced: 2, Strong: 3, Sporty: 4 };
+  return map[label] || 2;
+}
+function torqueBand(label) {
+  const map = { Linear: 1, Early: 2, Midrange: 3, Topend: 4 };
+  return map[label] || 2;
+}
+function mileageBand(label) {
+  const map = { '<10 kmpl': 1, '10–15 kmpl': 2, '15–20 kmpl': 3, '>20 kmpl': 4, '<10 km': 1, '10–15 km': 2, '15–20 km': 3, '>20 km': 4 };
+  return map[label] || 2;
+}
+
+// Distance-based spec score: converts difference into [0..1]
+function specDistanceScore(target, actual, maxDiff= Math.max(target, actual, 1)) {
+  const diff = Math.abs(target - actual);
+  const score = Math.max(0, 1 - diff / (maxDiff)); // linear falloff
+  return score;
+}
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Only POST' });
+    return;
+  }
+
+  try {
+    const payload = req.body;
+    const answers = payload.answers || {};
+    // Load static data
+    const variants = readData('variants.json'); // array
+    const cityRTO = readData('city_rto.json');
+    const banks = readData('banks.json');
+
+    // Extract user profile from answers
+    // answers expected in client canonical shape; we will accept simplified shapes too for testing
+    // We'll attempt to be permissive: allow either short keys or full structured answers
+    const profile = {
+      vehicleType: (answers.vehicleType && answers.vehicleType.labels && answers.vehicleType.labels[0]) || (answers.vehicleType && answers.vehicleType) || null,
+      persona: (answers.persona_word && answers.persona_word.labels && answers.persona_word.labels[0]) || (answers.persona_word && answers.persona_word) || null,
+      motive: (answers.motive && answers.motive.labels) || (answers.motive && answers.motive) || [],
+      attitude: (answers.attitude && answers.attitude.labels && answers.attitude.labels[0]) || (answers.attitude && answers.attitude) || null,
+      usage: (answers.primary_usage && answers.primary_usage.labels) || (answers.primary_usage && answers.primary_usage) || [],
+      daily_distance: (answers.daily_distance && answers.daily_distance.labels && answers.daily_distance.labels[0]) || (answers.daily_distance && answers.daily_distance) || null,
+      road_types: (answers.road_types && answers.road_types.labels) || (answers.road_types && answers.road_types) || [],
+      brand_reputation: (answers.brand_reputation && answers.brand_reputation.label) || (answers.brand_reputation && answers.brand_reputation),
+      ride_feeling: (answers.ride_feeling && answers.ride_feeling.labels) || (answers.ride_feeling && answers.ride_feeling) || [],
+      long_term_goal: (answers.long_term_goal && answers.long_term_goal.labels) || (answers.long_term_goal && answers.long_term_goal) || [],
+      // car/bike specifics
+      bike_style: answers.bike_style?.labels || answers.bike_style || [],
+      bike_power: answers.bike_power?.labels || answers.bike_power || [],
+      bike_torque: answers.bike_torque?.labels || answers.bike_torque || [],
+      bike_safety: answers.bike_safety?.labels || answers.bike_safety || [],
+      bike_tyres: answers.bike_tyres?.labels || answers.bike_tyres || [],
+      bike_must: answers.bike_must?.labels || answers.bike_must || [],
+      car_propulsion: answers.car_propulsion?.labels || answers.car_propulsion || [],
+      car_body: answers.car_body?.labels || answers.car_body || [],
+      car_power: (answers.car_power && answers.car_power.labels && answers.car_power.labels[0]) || (answers.car_power && answers.car_power) || null,
+      car_torque: (answers.car_torque && answers.car_torque.labels && answers.car_torque.labels[0]) || (answers.car_torque && answers.car_torque) || null,
+      car_home_charge: answers.car_home_charge?.label || answers.car_home_charge || null,
+      car_range_ev: answers.car_range_ev?.labels || answers.car_range_ev || [],
+      car_mileage: answers.car_mileage?.labels || answers.car_mileage || [],
+      car_tyres: answers.car_tyres?.labels || answers.car_tyres || [],
+      car_must: answers.car_must?.labels || answers.car_must || [],
+      budget: (answers.budget && answers.budget.labels) || (answers.budget && answers.budget) || [],
+      maintenance_tolerance: answers.maintenance_tolerance?.labels || answers.maintenance_tolerance || [],
+      efficiency_expectation: answers.efficiency_expectation?.labels || answers.efficiency_expectation || [],
+      ownership_duration: answers.ownership_duration?.labels || answers.ownership_duration || [],
+      monthly_income: toNum((answers.monthly_income && answers.monthly_income.other) || (answers.monthly_income && answers.monthly_income.label) || answers.monthly_income),
+      monthly_liabilities: toNum((answers.monthly_liabilities && answers.monthly_liabilities.other) || (answers.monthly_liabilities && answers.monthly_liabilities.label) || answers.monthly_liabilities),
+      city: (answers.city && answers.city.other) || (answers.city && answers.city.label) || answers.city || null
+    };
+
+    // Build typed user preferences for scoring
+    // power_pref, torque_pref, mileage_pref, must_haves[], desired_features[]
+    const power_pref = (profile.vehicleType && profile.vehicleType.toLowerCase() === 'bike') ? (profile.bike_power && profile.bike_power[0]) : profile.car_power;
+    const torque_pref = (profile.vehicleType && profile.vehicleType.toLowerCase() === 'bike') ? (profile.bike_torque && profile.bike_torque[0]) : profile.car_torque;
+    const mileage_pref = (profile.vehicleType && profile.vehicleType.toLowerCase() === 'bike') ? null : (profile.car_mileage && profile.car_mileage[0]); // bikes use actual mileage numbers
+
+    // desired features (flatten)
+    const desired_features = [];
+    const must_haves = [];
+    const pushIfArr = (arr) => {
+      if (!arr) return;
+      if (Array.isArray(arr)) arr.forEach(x=>{ if (x && typeof x==='string') desired_features.push(x); });
+      else if (typeof arr === 'string') desired_features.push(arr);
+    };
+    pushIfArr(profile.ride_feeling);
+    pushIfArr(profile.long_term_goal);
+    pushIfArr(profile.car_must);
+    pushIfArr(profile.bike_must);
+
+    // must-have strict list from car_must / bike_must
+    if (profile.car_must && profile.car_must.length) profile.car_must.forEach(x=>must_haves.push(x));
+    if (profile.bike_must && profile.bike_must.length) profile.bike_must.forEach(x=>must_haves.push(x));
+
+    // Filter variants by vehicleType (Car/Bike)
+    let candidateVariants = variants.filter(v => {
+      if (!profile.vehicleType) return true;
+      return v.vehicle_type && v.vehicle_type.toLowerCase() === profile.vehicleType.toLowerCase();
+    });
+
+    // Must-have strict filtering
+    if (must_haves.length > 0) {
+      const mustSet = new Set(must_haves.map(s=>s.toLowerCase()));
+      const filtered = candidateVariants.filter(v=>{
+        const featSet = new Set((v.features||[]).map(f=>f.toLowerCase()));
+        for (let m of mustSet) {
+          if (!featSet.has(m)) return false;
+        }
+        return true;
+      });
+      if (filtered.length > 0) {
+        candidateVariants = filtered;
+      } else {
+        // If strict no results, relax: produce closest matches (do not eliminate)
+        // Keep original candidates and add a flag that strict filter failed
+      }
+    }
+
+    // Scoring function per variant — follow given weights
+    function scoreVariant(v) {
+      // Feature score:
+      let matched = 0;
+      let totalDesired = desired_features.length || 0;
+      if (totalDesired === 0) {
+        var feature_score = 0.5;
+      } else {
+        for (let f of desired_features) {
+          if ((v.features||[]).map(x=>x.toLowerCase()).includes(String(f).toLowerCase())) matched++;
+        }
+        feature_score = matched / totalDesired;
+      }
+
+      // Spec score: map power/torque/mileage targets
+      const target_power = powerBand(power_pref);
+      const target_torque = torqueBand(torque_pref);
+      const target_mileage = mileageBand(mileage_pref);
+
+      // Convert variant numeric specs to bands roughly (normalize)
+      // For cars, map horsepower/power to 1..4 band using heuristic
+      function specToBandPower(val) {
+        if (!val) return 2;
+        // thresholds (cars & bikes vary) — simple mapping:
+        if (val <= 25) return 1; // small bike / basic
+        if (val <= 100) return 2; // small car / commuter
+        if (val <= 140) return 3;
+        return 4;
+      }
+      function specToBandTorque(val) {
+        if (!val) return 2;
+        if (val <= 20) return 1;
+        if (val <= 120) return 2;
+        if (val <= 160) return 3;
+        return 4;
+      }
+      function specToBandMileage(val) {
+        if (!val) return 2;
+        if (val <= 10) return 1;
+        if (val <= 15) return 2;
+        if (val <= 20) return 3;
+        return 4;
+      }
+
+      const actual_power_band = specToBandPower(v.power);
+      const actual_torque_band = specToBandTorque(v.torque);
+      const actual_mileage_band = specToBandMileage(v.mileage);
+
+      const power_score = specDistanceScore(target_power, actual_power_band);
+      const torque_score = specDistanceScore(target_torque, actual_torque_band);
+      const mileage_score = specDistanceScore(target_mileage, actual_mileage_band);
+
+      const spec_score = (0.4 * power_score) + (0.3 * torque_score) + (0.3 * mileage_score);
+
+      // Budget score: derive user max budget from budget labels
+      // Budget label options: <₹7L, ₹7–12L, ₹12–18L, >₹18L (cars) or bike equivalents
+      let max_budget = null;
+      try {
+        if (profile.budget && profile.budget.length) {
+          const b = profile.budget[0];
+          if (typeof b === 'string') {
+            if (b.includes('<₹7') || b.includes('<₹1')) max_budget = 700000;
+            else if (b.includes('₹7–12') || b.includes('₹1–2')) max_budget = 1200000;
+            else if (b.includes('₹12–18') || b.includes('₹2–4')) max_budget = 1800000;
+            else if (b.includes('>₹18') || b.includes('>₹4')) max_budget = 99999999;
+          }
+        }
+      } catch(e){}
+
+      let budget_score = 0.5;
+      if (max_budget) {
+        const price = v.ex_showroom || v.on_road || 0;
+        if (price <= max_budget) budget_score = 1;
+        else if (price <= max_budget * 1.10) budget_score = 0.7;
+        else if (price <= max_budget * 1.30) budget_score = 0.4;
+        else budget_score = 0;
+      }
+
+      // resale_maintenance combined
+      const resale = (v.resale_score || 0.5);
+      const maint = (v.maintenance_score || 0.5);
+      const resale_maintenance = (resale + (1 - maint)) / 2; // higher is better (if maintenance_score low means cheap => 1-maint)
+
+      // persona alignment (match tags)
+      let persona_score = 0;
+      try {
+        const tags = v.tags || [];
+        const personaWords = [];
+        if (profile.persona) personaWords.push(profile.persona);
+        if (profile.usage && profile.usage.length) personaWords.push(...profile.usage);
+        for (let p of personaWords) {
+          if (tags.map(t=>t.toLowerCase()).includes(String(p).toLowerCase())) persona_score += 1;
+        }
+        if (personaWords.length) persona_score = persona_score / personaWords.length;
+        else persona_score = 0.5;
+      } catch(e) { persona_score = 0.5; }
+
+      // Combine into variant_fit_score 0..100
+      const variant_fit = 0.30 * feature_score + 0.25 * spec_score + 0.20 * budget_score + 0.15 * persona_score + 0.10 * resale_maintenance;
+      const variant_fit_100 = Math.round(Math.max(0, Math.min(1, variant_fit)) * 100);
+
+      // Construct bullets: build 3 short bullets from matches
+      const bullets = [];
+      bullets.push(`${Math.round(spec_score*100)}% match on specs (power/torque/mileage).`);
+      if (matched>0) bullets.push(`${matched} desired feature(s) matched: ${ (v.features || []).filter(f=> desired_features.map(d=>d.toLowerCase()).includes(String(f).toLowerCase()) ).join(', ') || '—' }`);
+      bullets.push(`Fits your ${ (profile.usage && profile.usage[0]) || 'usage' } requirements.`);
+
+      const tradeoffs = [];
+      if (budget_score < 0.7) tradeoffs.push('Price may be above your preferred budget.');
+      if ((v.mileage||0) < 12 && (profile.efficiency_expectation && profile.efficiency_expectation.includes && profile.efficiency_expectation.includes('High'))) tradeoffs.push('Fuel efficiency is moderate.');
+
+      return {
+        id: v.id,
+        name: `${v.brand} ${v.model} — ${v.variant}`,
+        brand: v.brand,
+        model: v.model,
+        variant: v.variant,
+        price_onroad: v.on_road || Math.round((v.ex_showroom || 0) * 1.12), // crude on-road estimate if missing
+        variant_fit_score: variant_fit_100,
+        why: bullets.slice(0,3),
+        tradeoffs: tradeoffs.slice(0,2),
+        bullets: bullets
+      };
+    }
+
+    // Score all candidates
+    const scored = candidateVariants.map(v => scoreVariant(v));
+    // Sort by variant_fit_score desc
+    scored.sort((a,b) => b.variant_fit_score - a.variant_fit_score);
+
+    const primary = scored[0] || null;
+    const secondary = scored[1] || null;
+
+    // Optionally compute EMI suggestions if income provided? We'll skip here; front-end will call /api/emi
+    res.status(200).json({
+      persona: profile.persona || null,
+      primary,
+      secondary,
+      confidence: primary ? primary.variant_fit_score : 0,
+      note: (primary ? 'Result based on local variant catalog; connect live data for exact pricing.' : 'No matching variants found; try relaxing must-haves.')
+    });
+  } catch (err) {
+    console.error('match error', err);
+    res.status(500).json({ error: 'Server error', details: err.message });
+  }
+}

@@ -1,0 +1,43 @@
+// pages/api/dealers.js
+import fs from 'fs';
+import path from 'path';
+
+function readData(filename) {
+  const p = path.join(process.cwd(), 'public', 'data', filename);
+  const raw = fs.readFileSync(p, 'utf8');
+  return JSON.parse(raw);
+}
+
+export default function handler(req, res) {
+  const { pin, variant_id } = req.query;
+  const dealers = readData('dealers.json');
+
+  if (!pin) return res.status(400).json({ error: 'pin required' });
+
+  // exact pin match first, then any dealer containing same prefix
+  const exact = dealers.filter(d => d.pin_codes && d.pin_codes.includes(pin));
+  const prefix = pin.slice(0,3);
+  const prefixMatches = dealers.filter(d => d.pin_codes && d.pin_codes.some(p => p.startsWith(prefix)));
+
+  let results = exact.length ? exact : prefixMatches;
+  if (!results || results.length === 0) {
+    // fallback: return first 5 dealers in same city if provided, else return all
+    results = dealers.slice(0,5);
+  }
+
+  // annotate variant availability
+  const annotated = results.map(d=>{
+    const has_variant = Array.isArray(d.variants_stock) && variant_id ? d.variants_stock.includes(variant_id) : false;
+    return {
+      dealer_id: d.dealer_id,
+      name: d.name,
+      address: d.address,
+      phone: d.phone,
+      distance_km: null, // compute on frontend via coords if needed
+      has_variant,
+      test_ride_available: d.test_ride_available || false
+    };
+  });
+
+  res.status(200).json({ dealers: annotated });
+}

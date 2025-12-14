@@ -1,0 +1,24 @@
+{
+  "answers": {
+    "vehicleType": { "labels": ["Car"] },
+    "persona_word": { "labels": ["Balanced"] },
+    "motive": { "labels": ["Practicality","Aesthetics"] },
+    "attitude": { "labels": ["Steady"] },
+    "primary_usage": { "labels": ["Mixed"] },
+    "daily_distance": { "labels": ["25–50 km"] },
+    "road_types": { "labels": ["Traffic","Rough"] },
+    "brand_reputation": { "label": "Yes" },
+    "ride_feeling": { "labels": ["Modern"] },
+    "long_term_goal": { "labels": ["Touring / LongDrive"] },
+    "car_body": { "labels": ["CompactSUV"] },
+    "car_power": { "labels": ["Balanced"] },
+    "car_torque": { "labels": ["Midrange"] },
+    "car_mileage": { "labels": ["15–20 kmpl"] },
+    "car_tyres": { "labels": ["Alloy"] },
+    "car_must": { "labels": ["AutoAC","Camera","Sensors","Touchscreen"] },
+    "budget": { "labels": ["₹12–18L"] },
+    "monthly_income": { "other": "150000" },
+    "monthly_liabilities": { "other": "50000" },
+    "city": { "other": "Bangalore" }
+  }
+}

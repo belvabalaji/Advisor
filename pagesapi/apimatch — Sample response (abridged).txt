@@ -1,0 +1,21 @@
+{
+  "persona":"Balanced",
+  "primary":{
+    "id":"car_hyundai_creta_15_sx",
+    "name":"Hyundai Creta — 1.5 Petrol SX",
+    "price_onroad":1512000,
+    "variant_fit_score":86,
+    "why":["75% match on specs (power/torque/mileage).","2 desired feature(s) matched: Touchscreen, Camera","Fits your Mixed requirements."],
+    "tradeoffs":["Price may be above your preferred budget."]
+  },
+  "secondary":{
+    "id":"car_kia_seltos_15_htx",
+    "name":"Kia Seltos — 1.5 Petrol HTX",
+    "price_onroad":1490400,
+    "variant_fit_score":81,
+    "why":["70% match on specs ...","3 desired feature(s) matched ..."],
+    "tradeoffs":[]
+  },
+  "confidence":86,
+  "note":"Result based on local variant catalog; connect live data for exact pricing."
+}

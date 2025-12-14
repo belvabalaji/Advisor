@@ -1,0 +1,36 @@
+# Automentor Advisor (MVP)
+
+## Prereqs
+- Node 16+ / npm
+- Next.js (we use Next.js API routes)
+
+## Setup
+1. Clone this repo.
+2. Place data files into `/public/data/`:
+   - variants.json
+   - banks.json
+   - city_rto.json
+   - dealers.json
+   - bookings.json (empty array: [])
+
+3. Install dependencies:
+   npm install
+   npm install uuid
+
+4. Run locally:
+   npm run dev
+   (Open http://localhost:3000)
+
+## API Endpoints (serverless)
+- POST /api/match  — returns primary + secondary recommendations
+- POST /api/emi    — returns EMI table and recommended option
+- GET  /api/dealers?pin=560062&variant_id=car_hyundai_creta_15_sx
+- POST /api/book-testdrive — simulate booking (requires name, mobile, pin, variant_id)
+
+## Deploy to Vercel
+1. Push repo to GitHub.
+2. Create a Vercel account and import the repo.
+3. Deploy (Vercel will auto-detect Next.js).
+4. In Vercel project settings add domain `automentor.in` and follow DNS steps:
+   - Add A record / CNAME as Vercel instructs.
+

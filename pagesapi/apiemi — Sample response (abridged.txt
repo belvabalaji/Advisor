@@ -1,0 +1,13 @@
+{
+  "price_onroad":1830000,
+  "down_payment_percent":20,
+  "downPayment":366000,
+  "loan":1464000,
+  "safe_emi_limit":40000,
+  "emi_table":[
+    {"bank":"SBI","tenure":36,"emi":...,"total_interest":...,"affordable":false},
+    {"bank":"SBI","tenure":60,"emi":30200,"total_interest":...,"affordable":true},
+    ...
+  ],
+  "recommended":{"bank":"SBI","tenure_months":60,"emi":30200,"reason":"Affordable and lowest total interest among affordable options"}
+}

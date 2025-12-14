@@ -1,0 +1,57 @@
+// pages/api/book-testdrive.js
+import fs from 'fs';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+
+// Simple file-based storage for MVP:
+const STORAGE_PATH = path.join(process.cwd(), 'public', 'data', 'bookings.json');
+
+function readBookings() {
+  try {
+    const raw = fs.readFileSync(STORAGE_PATH, 'utf8');
+    return JSON.parse(raw);
+  } catch (e) {
+    return [];
+  }
+}
+function writeBookings(arr) {
+  fs.writeFileSync(STORAGE_PATH, JSON.stringify(arr, null, 2));
+}
+
+export default function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Only POST' });
+  const body = req.body || {};
+  const { name, mobile, email, pin, variant_id, preferred_date, preferred_time } = body;
+  if (!name || !mobile || !pin || !variant_id) return res.status(400).json({ error: 'name, mobile, pin and variant_id required' });
+
+  // find a dealer from dealers.json that matches pin
+  const dealers = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', 'data', 'dealers.json'), 'utf8'));
+  let dealer = dealers.find(d => d.pin_codes && d.pin_codes.includes(pin));
+  if (!dealer) dealer = dealers[0];
+
+  const booking = {
+    booking_id: uuidv4(),
+    name,
+    mobile,
+    email,
+    pin,
+    variant_id,
+    preferred_date: preferred_date || null,
+    preferred_time: preferred_time || null,
+    dealer: { name: dealer.name, phone: dealer.phone, address: dealer.address },
+    status: 'submitted',
+    created_at: new Date().toISOString()
+  };
+
+  const arr = readBookings();
+  arr.push(booking);
+  writeBookings(arr);
+
+  // For MVP: just return confirmation (no external calls)
+  res.status(200).json({
+    booking_id: booking.booking_id,
+    dealer: booking.dealer,
+    status: booking.status,
+    message: 'Booking recorded (simulation). Dealer will contact you.'
+  });
+}
